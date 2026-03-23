@@ -2,6 +2,8 @@ import ttkbootstrap as ttk
 from typing import List
 from tkinter import filedialog
 from ttkbootstrap.constants import INFO
+import os
+import sys
 
 
 class FilePickerWidget:
