@@ -10,7 +10,7 @@ from src.presentation.gui.views.home_view import HomeView
 def run_app():
     # Inicializar la ventana principal con un tema de ttkbootstrap
     app = ttk.Window(
-        title="Extractor PDF - Clean Architecture",
+        title="Extractor PDF - Clean Architecture 2",
         themename="flatly",
         size=(1000, 800),
         resizable=(True, True)
