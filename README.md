@@ -36,12 +36,9 @@ Para utilizar la aplicación **no necesitas instalar Python ni herramientas de d
 
 ## 📸 Interfaz de Usuario
 
-*(Añade aquí un par de capturas de pantalla de tu aplicación para hacer el repositorio más profesional)*
-
-```md
 ![Pantalla Principal](docs/screenshots/main-window.png)
 ![Tabla de Resultados](docs/screenshots/results-table.png)
-```
+
 
 ---
 
