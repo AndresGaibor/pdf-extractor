@@ -1,7 +1,8 @@
 import ttkbootstrap as ttk
-from ttkbootstrap.constants import *
-from tkinter import filedialog
 from typing import List
+from tkinter import filedialog
+from ttkbootstrap.constants import INFO
+
 
 class FilePickerWidget:
     def __init__(self, master, label: str = "Seleccionar archivos PDF"):

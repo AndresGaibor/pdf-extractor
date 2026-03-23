@@ -1,7 +1,7 @@
 [project]
 name = "extractor-pdf"
 version = "0.1.0"
-description = "Add your description here"
+description = "Desktop application for extracting structured judicial data from BOE PDF files and exporting it to Excel."
 readme = "README.md"
 requires-python = ">=3.13"
 dependencies = [
@@ -10,3 +10,15 @@ dependencies = [
     "pymupdf4llm==0.3.4",
     "ttkbootstrap>=1.20.2",
 ]
+
+[dependency-groups]
+dev = [
+    "pytest>=9.0.2",
+    "ruff>=0.15.7",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.ruff]
+target-version = "py313"

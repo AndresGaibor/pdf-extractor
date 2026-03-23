@@ -1,11 +1,11 @@
 import ttkbootstrap as ttk
-from ttkbootstrap.constants import *
-from ttkbootstrap.tableview import Tableview
 from tkinter import filedialog, messagebox
-import pandas as pd
-import os
+from ttkbootstrap.constants import BOTH, DISABLED, INFO, LEFT, NORMAL, PRIMARY, SUCCESS, X, YES
+from ttkbootstrap.tableview import Tableview
+
 from src.presentation.gui.controllers.process_controller import ProcessController
 from src.presentation.gui.widgets.file_picker import FilePickerWidget
+
 
 class HomeView(ttk.Frame):
     def __init__(self, master, controller: ProcessController):

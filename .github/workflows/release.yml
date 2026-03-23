@@ -1,0 +1,110 @@
+name: Release
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "pyproject.toml"
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    name: Create Release from pyproject version
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version-file: ".python-version"
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v7
+        with:
+          enable-cache: true
+
+      - name: Read version from pyproject.toml
+        id: version
+        shell: bash
+        run: |
+          VERSION=$(python - <<'PY'
+          import tomllib
+          with open("pyproject.toml", "rb") as f:
+              print(tomllib.load(f)["project"]["version"])
+          PY
+          )
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "tag=v$VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: Fetch tags
+        shell: bash
+        run: git fetch --tags --force
+
+      - name: Check if tag already exists
+        id: tagcheck
+        shell: bash
+        run: |
+          if git rev-parse "refs/tags/${{ steps.version.outputs.tag }}" >/dev/null 2>&1; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Stop if release already exists
+        if: steps.tagcheck.outputs.exists == 'true'
+        shell: bash
+        run: |
+          echo "Tag ${{ steps.version.outputs.tag }} already exists. Nothing to publish."
+          exit 0
+
+      - name: Sync dependencies
+        if: steps.tagcheck.outputs.exists == 'false'
+        run: uv sync --locked --dev
+
+      - name: Run Ruff
+        if: steps.tagcheck.outputs.exists == 'false'
+        run: uv run ruff check .
+
+      - name: Run Pytest
+        if: steps.tagcheck.outputs.exists == 'false'
+        run: uv run pytest
+
+      - name: Sync runtime dependencies
+        if: steps.tagcheck.outputs.exists == 'false'
+        run: uv sync --locked
+
+      - name: Build app with PyInstaller
+        if: steps.tagcheck.outputs.exists == 'false'
+        run: uv run --with pyinstaller python scripts/build_pyinstaller.py
+
+      - name: Zip build output
+        if: steps.tagcheck.outputs.exists == 'false'
+        shell: pwsh
+        run: Compress-Archive -Path dist/extractor-pdf/* -DestinationPath dist/extractor-pdf-${{ steps.version.outputs.tag }}.zip -Force
+
+      - name: Create tag
+        if: steps.tagcheck.outputs.exists == 'false'
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git tag "${{ steps.version.outputs.tag }}"
+          git push origin "${{ steps.version.outputs.tag }}"
+
+      - name: Create GitHub Release
+        if: steps.tagcheck.outputs.exists == 'false'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "${{ steps.version.outputs.tag }}" \
+            "dist/extractor-pdf-${{ steps.version.outputs.tag }}.zip" \
+            --title "${{ steps.version.outputs.tag }}" \
+            --generate-notes

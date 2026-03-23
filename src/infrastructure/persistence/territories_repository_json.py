@@ -156,7 +156,8 @@ class TerritoriesRepositoryJSON(ITerritoriesRepository):
         # 2. Buscar Provincias
         provincias_ordenadas = sorted(self._provincias.keys(), key=len, reverse=True)
         for prov_norm in provincias_ordenadas:
-            if len(prov_norm) <= 2: continue
+            if len(prov_norm) <= 2:
+                continue
             patron = r'\b' + re.escape(prov_norm) + r'\b'
             if re.search(patron, texto_norm):
                 return self._formatear_salida(*self._provincias[prov_norm])
@@ -164,7 +165,8 @@ class TerritoriesRepositoryJSON(ITerritoriesRepository):
         # 3. Buscar Municipios
         municipios_ordenados = sorted(self._municipios.keys(), key=len, reverse=True)
         for muni_norm in municipios_ordenados:
-            if len(muni_norm) < 3: continue 
+            if len(muni_norm) < 3:
+                continue
             patron = r'\b' + re.escape(muni_norm) + r'\b'
             if re.search(patron, texto_norm):
                 return self._formatear_salida(*self._municipios[muni_norm])
