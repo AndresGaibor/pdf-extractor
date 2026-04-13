@@ -32,6 +32,22 @@ class OrganPattern:
     has_locality: bool  # si el patrón incluye captura de localidad
 
 
+# Secciones comunes de Tribunales de Instancia
+SECCIONES_TI = (
+    r"Sección\s+de\s+(?:"
+    r"Instrucción"
+    r"|lo\s+Penal"
+    r"|lo\s+Civil"
+    r"|lo\s+Social"
+    r"|lo\s+Contencioso[\-\s]Administrativo"
+    r"|Violencia\s+sobre\s+la\s+Mujer"
+    r"|Familia,\s*Infancia\s+y\s+Capacidad"
+    r"|Menores"
+    r"|Vigilancia\s+Penitenciaria"
+    r"|[A-ZÁÉÍÓÚÜÑ][a-záéíóúüñA-ZÁÉÍÓÚÜÑ\s]+?"
+    r")"
+)
+
 # Lista de patrones ordenados de más específico a más genérico
 ORGAN_PATTERNS: list[OrganPattern] = [
     OrganPattern(
@@ -64,10 +80,23 @@ ORGAN_PATTERNS: list[OrganPattern] = [
         type_name="Audiencia Provincial",
         has_locality=True,
     ),
+    # Patrón nuevo: Sección del Tribunal de Instancia (prioridad alta)
+    OrganPattern(
+        name="seccion_ti",
+        pattern=rf"{SECCIONES_TI}\s+del\s+Tribunal\s+(?:Central\s+)?de\s+Instancia\s+de\s+({LUGAR}{FIN_ORGANO})",
+        type_name="Tribunal de Instancia",
+        has_locality=True,
+    ),
     OrganPattern(
         name="tribunal_instancia",
         pattern=rf"Tribunal\s+(?:Central\s+)?de\s+Instancia(?:\s+(?:de\s+)?{LUGAR})?{FIN_ORGANO}",
         type_name="Tribunal de Instancia",
+        has_locality=True,
+    ),
+    OrganPattern(
+        name="sala_tsj",
+        pattern=rf"Sala\s+de\s+[\w\s]+?\s+del\s+Tribunal\s+Superior\s+de\s+Justicia\s+de\s+({LUGAR}{FIN_ORGANO})",
+        type_name="Tribunal Superior de Justicia",
         has_locality=True,
     ),
     OrganPattern(
@@ -141,11 +170,35 @@ JUZGADO_SPECIALIZATIONS = [
     "Paz",
 ]
 
+SECCIONES_LIST = [
+    "Instrucción",
+    "lo Penal",
+    "lo Civil",
+    "lo Social",
+    "lo Contencioso-Administrativo",
+    "lo Contencioso Administrativo",
+    "Violencia sobre la Mujer",
+    "Familia, Infancia y Capacidad",
+    "Menores",
+    "Vigilancia Penitenciaria",
+]
+
 CARGO_SEPARATORS = [" del ", " de ", " que sirve "]
 
 ORGAN_STOP_WORDS = [
     "pasará", "había", "tramit", "resolv", "remit", "interpon",
     "admit", "dictad", "también", "previamente", "finalmente",
+]
+
+# Bloques de texto que indican fin de resoluciones útiles
+CUTOFF_MARKERS = [
+    "Excluir las siguientes solicitudes",
+    "La incidencia que en la resolución",
+    "Contra la presente disposición",
+    "Los Magistrados/as nombrados/as",
+    "Los/as jueces/zas nombrados/as",
+    "Incidencias",
+    "Excluir las siguientes",
 ]
 
 

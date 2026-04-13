@@ -5,6 +5,7 @@ Cada función tiene una sola responsabilidad:
 - extraer participante
 - extraer cargo
 - extraer provincias explícitas
+- separar origen/destino por "pasará a desempeñar"
 - construir la fila final
 """
 
@@ -15,11 +16,12 @@ from typing import Optional
 from src.domain.models.extracted_data import ExtractedRow
 from src.domain.services.transform_data import TransformDataService
 from src.infrastructure.pdf.organ_patterns import CARGO_SEPARATORS
-from src.infrastructure.pdf.parse_models import (
-    OrganMatch,
-)
+from src.infrastructure.pdf.parse_models import OrganMatch
 
 logger = logging.getLogger(__name__)
+
+# Separador clave entre origen y destino en BOE
+PASARA_SEPARATOR = "pasará a desempeñar"
 
 
 def extract_participant(parrafo: str) -> str:
@@ -41,8 +43,9 @@ def extract_cargo(parrafo: str) -> str:
     """
     Extrae el cargo del participante.
 
-    Formato esperado: "..., Jueza del Juzgado de...".
-    Busca el texto después de la segunda coma y antes del separador de cargo.
+    Extrae la categoría base: magistrado/a, juez/jueza,
+    con posibles calificativos como "de adscripción territorial",
+    "especialista en ...", etc.
     """
     partes_punto = parrafo.split('.', 1)
     if len(partes_punto) < 2:
@@ -50,15 +53,145 @@ def extract_cargo(parrafo: str) -> str:
     parte = partes_punto[1]
     partes_coma = parte.split(',')
     if len(partes_coma) < 2:
-        return ""
+        # Intentar extraer cargo sin coma (ej: "juez que sirve ...")
+        return _extract_cargo_no_coma(parte)
+
+    # El cargo está entre la primera y segunda coma
     cargo_bruto = partes_coma[1].strip()
+
+    # Detectar patrones especiales de cargo
+    cargo_especial = _detect_special_cargo(cargo_bruto)
+    if cargo_especial:
+        return cargo_especial
 
     # Cortar en el primer separador de cargo encontrado
     for separador in CARGO_SEPARATORS:
         if separador in cargo_bruto:
             cargo_bruto = cargo_bruto.split(separador)[0]
 
+    # Limpiar observaciones administrativas
+    cargo_bruto = _clean_cargo_observaciones(cargo_bruto)
+
     return cargo_bruto.strip()
+
+
+def _extract_cargo_no_coma(texto: str) -> str:
+    """
+    Extrae cargo cuando no hay coma separadora.
+    Ej: "juez que sirve en la Audiencia Provincial de ..."
+    """
+    m = re.match(
+        r'\s*(?:Don|Doña)?\s*[\w\s]+?,?\s*(juez[a]?|magistrad[a]?)\s',
+        texto, re.IGNORECASE
+    )
+    if m:
+        return m.group(1).strip().capitalize()
+
+    m = re.search(
+        r'(juez[a]?|magistrad[a]?)\s+de\s+adscripci[oó]n\s+territorial',
+        texto, re.IGNORECASE
+    )
+    if m:
+        return f"{m.group(1).strip().capitalize()} de adscripción territorial"
+
+    return ""
+
+
+def _detect_special_cargo(cargo_bruto: str) -> str:
+    """
+    Detecta cargos especiales que no siguen el patrón simple.
+    """
+    # "juez/jueza de adscripción territorial"
+    m = re.search(
+        r'(juez[a]?|magistrad[a]?)\s+de\s+adscripci[oó]n\s+territorial',
+        cargo_bruto, re.IGNORECASE
+    )
+    if m:
+        return f"{m.group(1).strip().capitalize()} de adscripción territorial"
+
+    # "magistrado/a especialista en ..."
+    m = re.search(
+        r'(magistrad[a]?)\s*,\s*especialista\s+(?:en|del)',
+        cargo_bruto, re.IGNORECASE
+    )
+    if m:
+        return f"{m.group(1).strip().capitalize()} especialista"
+
+    # "en situación administrativa de servicios especiales"
+    if re.search(r'servicios\s+especiales', cargo_bruto, re.IGNORECASE):
+        m = re.match(r'(magistrad[a]?|juez[a]?)', cargo_bruto, re.IGNORECASE)
+        if m:
+            return f"{m.group(1).strip().capitalize()} (servicios especiales)"
+
+    return ""
+
+
+def _clean_cargo_observaciones(cargo: str) -> str:
+    """
+    Limpia observaciones administrativas del cargo.
+    """
+    # Quitar "en situación administrativa..."
+    cargo = re.sub(
+        r'\s*,?\s*en\s+situaci[oó]n\s+administrativa.*',
+        '', cargo, flags=re.IGNORECASE
+    )
+    # Quitar "mientras su titular..."
+    cargo = re.sub(
+        r'\s*,?\s*mientras\s+su\s+titular.*',
+        '', cargo, flags=re.IGNORECASE
+    )
+    return cargo.strip()
+
+
+def split_origin_destination(parrafo: str) -> tuple[str, str]:
+    """
+    Divide el párrafo en bloque de origen y bloque de destino
+    usando el separador 'pasará a desempeñar'.
+
+    Devuelve (bloque_origen, bloque_destino).
+    """
+    if PASARA_SEPARATOR in parrafo:
+        idx = parrafo.index(PASARA_SEPARATOR)
+        bloque_origen = parrafo[:idx]
+        bloque_destino = parrafo[idx:]
+        return (bloque_origen, bloque_destino)
+
+    # Si no hay separador, todo es origen
+    return (parrafo, "")
+
+
+def extract_best_organo(
+    text: str,
+) -> Optional[OrganMatch]:
+    """
+    Extrae el mejor órgano de un bloque de texto (origen o destino).
+
+    Busca el órgano más específico y representativo, ignorando
+    aliases "(antes ...)" y referencias secundarias.
+    """
+    from src.infrastructure.pdf.organ_extractor import extract_organs
+
+    matches = extract_organs(text)
+
+    # Filtrar aliases
+    matches = [m for m in matches if not _looks_like_alias(m.raw)]
+
+    if not matches:
+        return None
+
+    # Devolver el primer órgano detectado (suele ser el más relevante)
+    return matches[0]
+
+
+def _looks_like_alias(raw: str) -> bool:
+    """
+    Detecta si un órgano parece ser un alias histórico tipo 'JPI 14'.
+    """
+    if re.match(r'^(antes\s+)?[A-Z]+(?:\s*\d+)?$', raw.strip(), re.IGNORECASE):
+        return True
+    if len(raw.split()) <= 2 and re.search(r'\d', raw):
+        return True
+    return False
 
 
 def extract_provincias_explicitas(
@@ -112,8 +245,8 @@ def parse_paragraph(
     """
     Parsea un párrafo completo y devuelve un ExtractedRow si es válido.
 
-    Este es el punto de entrada principal para el parsing de un párrafo.
-    Coordina la extracción de participante, cargo, órganos y provincias.
+    Usa la estrategia de dividir por 'pasará a desempeñar' para separar
+    origen y destino en vez de tomar los dos primeros órganos.
     """
     parrafo[:200]
 
@@ -128,42 +261,51 @@ def parse_paragraph(
     # Extraer cargo
     cargo = extract_cargo(parrafo)
 
+    # Dividir por "pasará a desempeñar"
+    bloque_origen, bloque_destino = split_origin_destination(parrafo)
+
+    # Extraer mejor órgano de cada bloque
+    origen_match = extract_best_organo(bloque_origen)
+    destino_match = extract_best_organo(bloque_destino) if bloque_destino else None
+
     # Extraer provincias explícitas
     provincias = extract_provincias_explicitas(parrafo, organ_matches)
 
-    # Resolver origen y destino
+    # Resolver origen
     tribunal_origen = ""
-    tribunal_destino = ""
     prov_loc_origen = ""
-    prov_loc_destino = ""
+    if origen_match:
+        tribunal_origen = origen_match.organ_type
+        if origen_match.seccion:
+            tribunal_origen = f"{origen_match.seccion} del {origen_match.organ_type}"
 
-    if organ_matches:
-        # Origen: primer tribunal
-        primer_organ = organ_matches[0]
-        tribunal_origen = primer_organ.organ_type
-
-        if 0 in provincias:
+        idx_origen = _find_organ_index(organ_matches, origen_match)
+        if idx_origen is not None and idx_origen in provincias:
             prov_loc_origen = transform_service.resolve_localidad(
-                provincias[0], primer_organ.raw
+                provincias[idx_origen], origen_match.raw
             )
         else:
             prov_loc_origen = transform_service.resolve_localidad(
-                primer_organ.locality, primer_organ.raw
+                origen_match.locality, origen_match.raw
             )
 
-        # Destino: segundo tribunal (si existe)
-        if len(organ_matches) > 1:
-            segundo_organ = organ_matches[1]
-            tribunal_destino = segundo_organ.organ_type
+    # Resolver destino
+    tribunal_destino = ""
+    prov_loc_destino = ""
+    if destino_match:
+        tribunal_destino = destino_match.organ_type
+        if destino_match.seccion:
+            tribunal_destino = f"{destino_match.seccion} del {destino_match.organ_type}"
 
-            if 1 in provincias:
-                prov_loc_destino = transform_service.resolve_localidad(
-                    provincias[1], segundo_organ.raw
-                )
-            else:
-                prov_loc_destino = transform_service.resolve_localidad(
-                    segundo_organ.locality, segundo_organ.raw
-                )
+        idx_destino = _find_organ_index(organ_matches, destino_match)
+        if idx_destino is not None and idx_destino in provincias:
+            prov_loc_destino = transform_service.resolve_localidad(
+                provincias[idx_destino], destino_match.raw
+            )
+        else:
+            prov_loc_destino = transform_service.resolve_localidad(
+                destino_match.locality, destino_match.raw
+            )
 
     return ExtractedRow(
         participante=participante,
@@ -173,3 +315,16 @@ def parse_paragraph(
         prov_loc_origen=prov_loc_origen,
         prov_loc_destino=prov_loc_destino,
     )
+
+
+def _find_organ_index(
+    organ_matches: list[OrganMatch],
+    target: OrganMatch,
+) -> Optional[int]:
+    """Encuentra el índice de un órgano en la lista por posición."""
+    for i, organ in enumerate(organ_matches):
+        if organ.start == target.start and organ.end == target.end:
+            return i
+        if organ.raw == target.raw:
+            return i
+    return None

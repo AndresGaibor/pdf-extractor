@@ -4,9 +4,12 @@ División y recomposición de párrafos numerados de BOE.
 Detecta párrafos que inician con numeración (Uno, Dos, etc.)
 y agrupa las continuaciones que no inician con numeración
 con el párrafo anterior.
+
+También detecta bloques de corte que indican fin de resoluciones útiles.
 """
 
 from src.domain.constants import NUMERACION
+from src.infrastructure.pdf.organ_patterns import CUTOFF_MARKERS
 
 
 def build_candidate_paragraphs(clean_text: str) -> list[str]:
@@ -17,6 +20,7 @@ def build_candidate_paragraphs(clean_text: str) -> list[str]:
     2. Filtra bloques vacíos
     3. Detecta párrafos que inician con numeración
     4. Agrupa las continuaciones con el párrafo anterior
+    5. Detiene el procesamiento al encontrar un bloque de corte
 
     Devuelve solo los párrafos que inician con numeración
     (incluyendo sus continuaciones concatenadas).
@@ -25,6 +29,10 @@ def build_candidate_paragraphs(clean_text: str) -> list[str]:
 
     result: list[str] = []
     for parrafo in parrafos:
+        # Detectar bloques de corte: fin de resoluciones útiles
+        if _is_cutoff_block(parrafo):
+            break
+
         if parrafo.startswith(tuple(NUMERACION)):
             result.append(parrafo)
         elif result:
@@ -32,6 +40,15 @@ def build_candidate_paragraphs(clean_text: str) -> list[str]:
             result[-1] += ' ' + parrafo
 
     return result
+
+
+def _is_cutoff_block(text: str) -> bool:
+    """Verifica si un texto contiene un marcador de fin de resoluciones."""
+    texto_normalizado = text.strip()
+    for marker in CUTOFF_MARKERS:
+        if marker.lower() in texto_normalizado.lower():
+            return True
+    return False
 
 
 def is_numbered_paragraph(text: str) -> bool:

@@ -18,12 +18,15 @@ def extract_organs(text: str) -> list[OrganMatch]:
     """
     Extrae todos los órganos judiciales encontrados en el texto.
 
-    Normaliza el texto, aplica patrones compilados y devuelve
-    una lista de OrganMatch deduplicada y ordenada por posición.
+    Normaliza el texto, filtra aliases "(antes ...)", aplica patrones
+    compilados y devuelve una lista de OrganMatch deduplicada y ordenada.
     """
     # Normalizar espacios
     text = re.sub(r'\s+', ' ', text)
     text = text.replace('\u2018', "'").replace('\u2019', "'")
+
+    # Extraer aliases "(antes ...)" antes de buscar órganos
+    aliases = _extract_aliases(text)
 
     compiled = compile_organ_pattern()
     matches: list[OrganMatch] = []
@@ -38,13 +41,25 @@ def extract_organs(text: str) -> list[OrganMatch]:
             continue
         vistos.add(organo_raw)
 
-        organ_type, locality = _classify_match(organo_raw, text, match.start(), match.end())
+        # Extraer sección si aplica
+        seccion = _extract_seccion(organo_raw)
+
+        # Extraer número de plaza si aplica
+        numero_plaza = _extract_numero_plaza(text, match.start(), match.end())
+
+        # Buscar alias histórico cercano
+        alias = _find_nearest_alias(aliases, match.start(), match.end())
+
+        organ_type, locality = _classify_match(organo_raw)
         matches.append(OrganMatch(
             raw=organo_raw,
             organ_type=organ_type,
             locality=locality,
             start=match.start(),
             end=match.end(),
+            seccion=seccion,
+            numero_plaza=numero_plaza,
+            alias_historico=alias,
         ))
 
     # Ordenar por posición de aparición
@@ -52,12 +67,65 @@ def extract_organs(text: str) -> list[OrganMatch]:
     return matches
 
 
-def _classify_match(
-    raw: str,
-    text: str,
-    start: int,
-    end: int,
-) -> tuple[str, str]:
+def _extract_aliases(text: str) -> list[tuple[str, int, int]]:
+    """
+    Extrae todos los aliases tipo '(antes JPI 14)' del texto.
+    Devuelve lista de (texto_alias, start, end).
+    """
+    patron = re.compile(r'\(\s*antes\s+([^)]+)\)', re.IGNORECASE)
+    return [(m.group(1).strip(), m.start(), m.end()) for m in patron.finditer(text)]
+
+
+def _extract_seccion(organo_raw: str) -> str:
+    """
+    Extrae la sección de un órgano si contiene 'Sección de ... del Tribunal'.
+    """
+    m = re.search(
+        r'(Sección\s+de\s+[\w\s]+?)\s+del\s+Tribunal',
+        organo_raw, re.IGNORECASE
+    )
+    if m:
+        return m.group(1).strip()
+
+    # También detectar "Sala de ... del TSJ"
+    m = re.search(
+        r'(Sala\s+de\s+[\w\s]+?)\s+del\s+Tribunal\s+Superior',
+        organo_raw, re.IGNORECASE
+    )
+    if m:
+        return m.group(1).strip()
+
+    return ""
+
+
+def _extract_numero_plaza(text: str, start: int, end: int) -> str:
+    """
+    Busca 'plaza número X' en el contexto inmediato del órgano.
+    """
+    contexto = text[max(0, start - 80):start]
+    m = re.search(r'plaza\s+n[úu]mero\s+(\d+)', contexto, re.IGNORECASE)
+    if m:
+        return m.group(1)
+    return ""
+
+
+def _find_nearest_alias(
+    aliases: list[tuple[str, int, int]],
+    organ_start: int,
+    organ_end: int,
+) -> str:
+    """Busca el alias '(antes ...)' más cercano al órgano detectado."""
+    best = ""
+    best_dist = float('inf')
+    for alias_text, alias_start, alias_end in aliases:
+        dist = abs(alias_start - organ_end)
+        if dist < best_dist and dist < 200:  # máximo 200 chars de distancia
+            best_dist = dist
+            best = alias_text
+    return best
+
+
+def _classify_match(raw: str) -> tuple[str, str]:
     """
     Determina el tipo canónico y localidad de un órgano detectado.
 
@@ -89,7 +157,6 @@ def _classify_match(
 def _separate_tipo_localidad(raw: str, default_type: str) -> tuple[str, str]:
     """
     Separa tipo y localidad de un órgano cuando el patrón no capturó grupo.
-    Usa la misma lógica que el método _separar_tipo_y_localidad original.
     """
     if not raw:
         return ("", "")
@@ -104,10 +171,26 @@ def _separate_tipo_localidad(raw: str, default_type: str) -> tuple[str, str]:
         if re.match(prefix, raw, re.IGNORECASE):
             return (raw, "")
 
+    # Sección del Tribunal de Instancia de <lugar>
+    m = re.search(
+        r'del\s+Tribunal\s+(?:Central\s+)?de\s+Instancia\s+de\s+(.+)',
+        raw, re.IGNORECASE
+    )
+    if m:
+        return ("Tribunal de Instancia", m.group(1).strip())
+
     # TSJ de <lugar>
     m = re.match(r'(Tribunal\s+Superior\s+de\s+Justicia)\s+de\s+(.+)', raw, re.IGNORECASE)
     if m:
         return (m.group(1).strip(), m.group(2).strip())
+
+    # Sala del TSJ de <lugar>
+    m = re.search(
+        r'del\s+Tribunal\s+Superior\s+de\s+Justicia\s+de\s+(.+)',
+        raw, re.IGNORECASE
+    )
+    if m:
+        return ("Tribunal Superior de Justicia", m.group(1).strip())
 
     # Audiencia Provincial de <lugar>
     m = re.match(r'(Audiencia\s+Provincial)\s+de\s+(.+)', raw, re.IGNORECASE)

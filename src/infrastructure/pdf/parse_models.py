@@ -16,6 +16,10 @@ class OrganMatch:
     locality: str         # e.g. "Sevilla", ""
     start: int            # posición inicial en el texto
     end: int              # posición final en el texto
+    seccion: str = ""     # e.g. "Sección de Instrucción", ""
+    numero_plaza: str = "" # e.g. "1", ""
+    alias_historico: str = "" # e.g. "JINSTR 1", ""
+    observaciones: list[str] = field(default_factory=list)
 
 
 @dataclass
