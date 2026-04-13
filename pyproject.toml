@@ -5,10 +5,10 @@ description = "Desktop application for extracting structured judicial data from 
 readme = "README.md"
 requires-python = ">=3.13"
 dependencies = [
+    "customtkinter>=5.2.2",
     "openpyxl==3.1.5",
     "pandas==2.3.3",
     "pymupdf4llm==0.3.4",
-    "ttkbootstrap>=1.20.2",
 ]
 
 [dependency-groups]

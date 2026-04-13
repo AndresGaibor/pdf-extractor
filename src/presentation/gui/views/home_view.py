@@ -1,85 +1,99 @@
-import ttkbootstrap as ttk
+import customtkinter as ctk
 from tkinter import filedialog, messagebox
-from ttkbootstrap.constants import BOTH, DISABLED, INFO, LEFT, NORMAL, PRIMARY, SUCCESS, X, YES
-from ttkbootstrap.tableview import Tableview
+from tkinter import ttk
 
 from src.presentation.gui.controllers.process_controller import ProcessController
 from src.presentation.gui.widgets.file_picker import FilePickerWidget
 
 
-class HomeView(ttk.Frame):
+class HomeView(ctk.CTkFrame):
     def __init__(self, master, controller: ProcessController):
-        super().__init__(master, padding=20)
+        super().__init__(master)
         self.controller = controller
         self.all_rows = []
         self._setup_ui()
 
     def _setup_ui(self):
         # Título
-        title_label = ttk.Label(
-            self, 
-            text="Extractor de Datos de PDF", 
-            font=("Helvetica", 18, "bold"),
-            bootstyle=PRIMARY
+        title_label = ctk.CTkLabel(
+            self,
+            text="Extractor de Datos de PDF",
+            font=ctk.CTkFont(family="Helvetica", size=18, weight="bold")
         )
         title_label.pack(pady=(0, 20))
 
         # Widget de selección de archivos
         self.file_picker = FilePickerWidget(self)
-        self.file_picker.pack(fill=X, pady=10)
+        self.file_picker.pack(fill="x", pady=10)
 
         # Botón de procesamiento
-        self.process_btn = ttk.Button(
-            self, 
-            text="Procesar PDFs", 
+        self.process_btn = ctk.CTkButton(
+            self,
+            text="Procesar PDFs",
             command=self._on_process,
-            bootstyle=SUCCESS
+            fg_color="#2ecc71",
+            hover_color="#27ae60"
         )
         self.process_btn.pack(pady=10)
 
         # Panel de métricas
-        self.metrics_frame = ttk.Frame(self)
-        self.metrics_frame.pack(fill=X, pady=20)
-        
-        self.lbl_count = ttk.Label(self.metrics_frame, text="Participantes: 0", font=("Helvetica", 10, "bold"))
-        self.lbl_count.pack(side=LEFT, padx=20)
-        
-        self.lbl_files = ttk.Label(self.metrics_frame, text="PDFs: 0", font=("Helvetica", 10, "bold"))
-        self.lbl_files.pack(side=LEFT, padx=20)
+        self.metrics_frame = ctk.CTkFrame(self)
+        self.metrics_frame.pack(fill="x", pady=20)
+
+        self.lbl_count = ctk.CTkLabel(
+            self.metrics_frame,
+            text="Participantes: 0",
+            font=ctk.CTkFont(family="Helvetica", size=10, weight="bold")
+        )
+        self.lbl_count.pack(side="left", padx=20, pady=10)
+
+        self.lbl_files = ctk.CTkLabel(
+            self.metrics_frame,
+            text="PDFs: 0",
+            font=ctk.CTkFont(family="Helvetica", size=10, weight="bold")
+        )
+        self.lbl_files.pack(side="left", padx=20, pady=10)
 
         # Tabla de resultados
         self._setup_table()
 
         # Botón de descarga
-        self.download_btn = ttk.Button(
-            self, 
-            text="📥 Descargar Excel", 
+        self.download_btn = ctk.CTkButton(
+            self,
+            text="Descargar Excel",
             command=self._on_download,
-            bootstyle=INFO,
-            state=DISABLED
+            fg_color="#3498db",
+            hover_color="#2980b9",
+            state="disabled"
         )
         self.download_btn.pack(pady=20)
 
     def _setup_table(self):
-        self.coldata = [
-            {"text": "Participante", "stretch": True},
-            {"text": "Cargo", "stretch": True},
-            {"text": "T. Origen", "stretch": True},
-            {"text": "T. Destino", "stretch": True},
-            {"text": "Loc. Origen", "stretch": True},
-            {"text": "Loc. Destino", "stretch": True},
-        ]
-        
-        self.table = Tableview(
-            master=self,
-            coldata=self.coldata,
-            rowdata=[],
-            paginated=True,
-            searchable=True,
-            bootstyle=PRIMARY,
-            height=10
-        )
-        self.table.pack(fill=BOTH, expand=YES)
+        # Crear un Treeview estándar de tkinter para la tabla de resultados
+        table_container = ctk.CTkFrame(self)
+        table_container.pack(fill="both", expand=True)
+
+        columns = ("participante", "cargo", "t_origen", "t_destino", "loc_origen", "loc_destino")
+        self.tree = ttk.Treeview(table_container, columns=columns, show="headings")
+
+        # Configurar encabezadas
+        self.tree.heading("participante", text="Participante")
+        self.tree.heading("cargo", text="Cargo")
+        self.tree.heading("t_origen", text="T. Origen")
+        self.tree.heading("t_destino", text="T. Destino")
+        self.tree.heading("loc_origen", text="Loc. Origen")
+        self.tree.heading("loc_destino", text="Loc. Destino")
+
+        # Configurar columnas
+        for col in columns:
+            self.tree.column(col, stretch=True, width=150)
+
+        # Agregar scrollbar
+        scrollbar = ttk.Scrollbar(table_container, orient="vertical", command=self.tree.yview)
+        self.tree.configure(yscrollcommand=scrollbar.set)
+
+        self.tree.pack(side="left", fill="both", expand=True)
+        scrollbar.pack(side="right", fill="y")
 
     def _on_process(self):
         file_paths = self.file_picker.get_selected_files()
@@ -87,8 +101,8 @@ class HomeView(ttk.Frame):
             messagebox.showwarning("Atención", "Por favor, seleccione al menos un archivo PDF.")
             return
 
-        self.process_btn.config(state=DISABLED)
-        
+        self.process_btn.configure(state="disabled")
+
         try:
             all_rows, errors = self.controller.process_files_by_path(file_paths)
             self.all_rows = all_rows
@@ -99,25 +113,28 @@ class HomeView(ttk.Frame):
 
             if all_rows:
                 self._update_results(all_rows, len(file_paths))
-                self.download_btn.config(state=NORMAL)
+                self.download_btn.configure(state="normal")
             else:
                 messagebox.showinfo("Información", "No se encontraron datos para extraer en los PDFs seleccionados.")
-                self.download_btn.config(state=DISABLED)
-                
+                self.download_btn.configure(state="disabled")
+
         except Exception as e:
             messagebox.showerror("Error", f"Ocurrió un error inesperado: {str(e)}")
         finally:
-            self.process_btn.config(state=NORMAL)
+            self.process_btn.configure(state="normal")
 
     def _update_results(self, rows, num_files):
+        # Limpiar tabla actual
+        for item in self.tree.get_children():
+            self.tree.delete(item)
+
         # Actualizar métricas
-        self.lbl_count.config(text=f"Participantes: {len(rows)}")
-        self.lbl_files.config(text=f"PDFs: {num_files}")
+        self.lbl_count.configure(text=f"Participantes: {len(rows)}")
+        self.lbl_files.configure(text=f"PDFs: {num_files}")
 
         # Actualizar tabla
-        table_data = []
         for r in rows:
-            table_data.append((
+            self.tree.insert("", "end", values=(
                 r.participante,
                 r.cargo,
                 r.tribunal_origen,
@@ -125,8 +142,6 @@ class HomeView(ttk.Frame):
                 r.prov_loc_origen,
                 r.prov_loc_destino
             ))
-        
-        self.table.build_table_data(coldata=self.coldata, rowdata=table_data)
 
     def _on_download(self):
         if not self.all_rows:
@@ -137,7 +152,7 @@ class HomeView(ttk.Frame):
             filetypes=[("Excel files", "*.xlsx")],
             initialfile="participantes.xlsx"
         )
-        
+
         if file_path:
             try:
                 excel_bytes = self.controller.get_excel_report(self.all_rows)
