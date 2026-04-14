@@ -1,11 +1,9 @@
 """Tests para row_parser.py - extracción de campos de párrafos."""
 
 
-from src.infrastructure.pdf.row_parser import (
-    extract_participant,
-    extract_cargo,
-    extract_provincias_explicitas,
-)
+from src.infrastructure.pdf.participant_parser import extract_participant
+from src.infrastructure.pdf.cargo_parser import extract_cargo
+from src.infrastructure.pdf.row_parser import extract_provincias_explicitas
 from src.infrastructure.pdf.parse_models import OrganMatch
 
 

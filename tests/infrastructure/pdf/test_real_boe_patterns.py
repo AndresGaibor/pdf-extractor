@@ -11,12 +11,14 @@ Estos tests cubren los patrones problemáticos encontrados en los PDFs reales:
 
 
 from src.infrastructure.pdf.organ_extractor import extract_organs
-from src.infrastructure.pdf.row_parser import (
-    extract_participant,
-    extract_cargo,
-    split_origin_destination,
-    extract_best_organo,
+from src.infrastructure.pdf.organ_selector import (
+    pick_best_organo,
     _looks_like_alias,
+)
+from src.infrastructure.pdf.participant_parser import extract_participant
+from src.infrastructure.pdf.cargo_parser import extract_cargo
+from src.infrastructure.pdf.row_parser import (
+    split_origin_destination,
 )
 from src.infrastructure.pdf.paragraph_splitter import (
     build_candidate_paragraphs,
@@ -128,7 +130,8 @@ class TestOriginDestinationSplit:
             "magistrada de la Audiencia Provincial de Sevilla, "
             "especialista en menores"
         )
-        match = extract_best_organo(text)
+        organs = extract_organs(text)
+        match = pick_best_organo(organs, text)
         assert match is not None
         assert "Audiencia Provincial" in match.organ_type
 
