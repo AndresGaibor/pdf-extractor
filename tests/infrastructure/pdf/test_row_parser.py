@@ -18,12 +18,13 @@ class TestExtractParticipant:
     def test_with_dona_prefix(self):
         text = "Dos. Doña Ana Fernández Torres, Fiscal"
         result = extract_participant(text)
-        assert result == "Doña Ana Fernández Torres"
+        # Don/Doña is stripped by the parser
+        assert result == "Ana Fernández Torres"
 
     def test_with_don_prefix(self):
         text = "Tres. Don Carlos Rodríguez Martínez, Letrado"
         result = extract_participant(text)
-        assert result == "Don Carlos Rodríguez Martínez"
+        assert result == "Carlos Rodríguez Martínez"
 
     def test_no_period(self):
         text = "María García sin numeración"

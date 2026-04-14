@@ -9,6 +9,18 @@ from dataclasses import dataclass, field
 
 
 @dataclass
+class TextBlock:
+    """
+    Representa un bloque de texto con su posición absoluta en el párrafo.
+
+    Permite filtrar órganos por rango real en vez de substring matching.
+    """
+    text: str
+    start: int  # posición inicial en el párrafo original
+    end: int    # posición final (exclusiva) en el párrafo original
+
+
+@dataclass
 class OrganMatch:
     """Representa un órgano judicial detectado en el texto."""
     raw: str
@@ -48,6 +60,61 @@ class ParsedParagraph:
     @property
     def is_valid(self) -> bool:
         return bool(self.participante) and len(self.participante.split()) >= 2
+
+
+@dataclass
+class ParagraphParseResult:
+    """
+    Resultado completo del parsing de un párrafo con trazabilidad.
+
+    Contiene toda la información necesaria para entender por qué
+    se eligieron ciertos órganos y por qué pudo fallar el parsing.
+    """
+    raw_text: str
+    participante: str = ""
+    cargo: str = ""
+
+    # Bloques de origen/destino con posiciones
+    bloque_origen: TextBlock | None = None
+    bloque_destino: TextBlock | None = None
+
+    # Órganos filtrados por bloque
+    organos_origen: list[OrganMatch] = field(default_factory=list)
+    organos_destino: list[OrganMatch] = field(default_factory=list)
+
+    # Órganos elegidos (mejor puntuación)
+    origen_elegido: OrganMatch | None = None
+    destino_elegido: OrganMatch | None = None
+
+    # Resultado final
+    tribunal_origen: str = ""
+    tribunal_destino: str = ""
+    prov_loc_origen: str = ""
+    prov_loc_destino: str = ""
+
+    # Diagnóstico
+    issues: list[ParseIssue] = field(default_factory=list)
+
+    @property
+    def is_valid(self) -> bool:
+        return bool(self.participante) and bool(self.tribunal_origen)
+
+    def to_debug_dict(self) -> dict:
+        """Convierte en dict para depuración."""
+        return {
+            "raw_preview": self.raw_text[:200],
+            "participante": self.participante,
+            "cargo": self.cargo,
+            "bloque_origen": self.bloque_origen.text[:100] if self.bloque_origen else None,
+            "bloque_destino": self.bloque_destino.text[:100] if self.bloque_destino else None,
+            "organos_origen": [o.raw for o in self.organos_origen],
+            "organos_destino": [o.raw for o in self.organos_destino],
+            "origen_elegido": self.origen_elegido.raw if self.origen_elegido else None,
+            "destino_elegido": self.destino_elegido.raw if self.destino_elegido else None,
+            "tribunal_origen": self.tribunal_origen,
+            "tribunal_destino": self.tribunal_destino,
+            "issues": [{"stage": i.stage, "error": i.error, "context": i.context} for i in self.issues],
+        }
 
 
 @dataclass

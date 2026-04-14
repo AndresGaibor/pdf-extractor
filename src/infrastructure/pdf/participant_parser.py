@@ -1,93 +1,161 @@
 """
-Parser de participantes con regex anclada al inicio del párrafo.
+Parser de participantes con enfoque por capas, no regex gigante.
 
-Reemplaza el enfoque split('.') por una regex que modela la gramática
-real de la numeración BOE:
-    (Numeración). (Don/Doña) Nombre Apellido,
+Estrategia:
+1. Localizar el primer punto del item (fin de la numeración)
+2. Tomar el contenido posterior
+3. Eliminar tratamiento opcional (Don, Doña, D., Dña.)
+4. Tomar el segmento hasta la primera coma
+5. Validar que parece nombre real
 """
 
 import re
 
-# Regex para extraer el nombre del participante.
-# Captura: numeración + tratamiento opcional + nombre completo + coma de cierre
-PARTICIPANT_RE = re.compile(
-    r'^'
-    # Numeración textual: "Uno", "Veintitres", "Ciento cinco", etc.
-    r'(?:Uno|Dos|Tres|Cuatro|Cinco|Seis|Siete|Ocho|Nueve|Diez|'
-    r'Once|Doce|Trece|Catorce|Quince|Dieciseis|Diecisiete|Dieciocho|'
-    r'Diecinueve|Veinte|Veintiuno|Veintidos|Veintitres|Veinticuatro|'
-    r'Veinticinco|Veintiseis|Veintisiete|Veintiocho|Veintinueve|'
-    r'Treinta(?:\s+y\s+\w+)?|'
-    r'Cuarenta(?:\s+y\s+\w+)?|'
-    r'Cincuenta(?:\s+y\s+\w+)?|'
-    r'Sesenta|Setenta|Ochenta|Noventa|'
-    r'Ciento(?:\s+\w+)?|'
-    r'(?:Dos|Tres|Cuatro|Quin|Seis|Set|Och|Nove)cientos(?:\s+\w+)?|'
-    r'Mil)'
-    r'\.\s+'
-    # Tratamiento opcional: Don, Doña, D., Dña.
-    r'(?:D[ao]n[a]?\.\s+)?'
-    # Nombre: empieza con mayúscula, contiene letras, espacios, guiones, apóstrofes
-    r'([A-ZÁÉÍÓÚÜÑ][a-záéíóúüñA-ZÁÉÍÓÚÜÑ\-\']+)'
-    # Seguido de coma o " del " o " de " que cierra el nombre
-    r'(?=\s*[,]|(?:\s+del\s|\s+de\s|\s+que\s))',
-    re.IGNORECASE,
+# Prefijos de tratamiento a eliminar
+TREATMENT_PREFIXES = re.compile(
+    r'^(?:Don|Doña|D[ño]a?\.?|D\.)\s+',
+    re.IGNORECASE
+)
+
+# Términos que NO deben aparecer en un nombre válido
+FORBIDDEN_IN_NAME = re.compile(
+    r'\b(?:juez|jueza|magistrad|tribunal|audiencia|sección|sala|'
+    r'juzgado|oficina\s+de\s+justicia|pasará|plaza|provincia|'
+    r'servicios\s+especiales|situaci[oó]n\s+administrativa)\b',
+    re.IGNORECASE
 )
 
 
 def extract_participant(parrafo: str) -> str:
     """
-    Extrae el nombre del participante usando regex anclada.
+    Extrae el nombre del participante usando un enfoque por capas.
 
-    Soporta:
-    - "Uno. Doña María García López, Jueza del..."
-    - "Dos. Don Carlos Rodríguez Martínez, Letrado..."
-    - "Tres. Ana Belén Ortiz Roca, jueza..."
-    - "Veintiuno. María del Carmen Pérez, magistrada..."
-
-    Devuelve "" si no encuentra participante válido.
+    No intenta modelar toda la gramática BOE con una regex.
+    En su lugar, aplica pasos secuenciales simples.
     """
-    if not parrafo:
+    if not parrafo or not parrafo.strip():
         return ""
 
-    match = PARTICIPANT_RE.match(parrafo.strip())
-    if match:
-        nombre = match.group(1).strip()
-        # Validar que parece un nombre real (al menos 2 palabras o "del/de" en medio)
-        if _looks_like_name(nombre):
-            return nombre
+    texto = parrafo.strip()
 
-    # Fallback: intentar split('.') como antes
-    return _extract_fallback(parrafo)
+    # Paso 1: Localizar primer punto (fin de la numeración)
+    idx_punto = _find_first_period(texto)
+    if idx_punto < 0:
+        return ""
+
+    # Paso 2: Tomar contenido después del punto
+    despues_punto = texto[idx_punto + 1:].strip()
+    if not despues_punto:
+        return ""
+
+    # Paso 3: Eliminar tratamiento opcional
+    despues_tratamiento = _strip_treatment(despues_punto)
+
+    # Paso 4: Tomar segmento hasta primera coma
+    nombre_candidato = _take_until_comma(despues_tratamiento)
+
+    # Paso 5: Validar
+    if _looks_like_name(nombre_candidato):
+        return nombre_candidato.strip()
+
+    return ""
+
+
+def _find_first_period(text: str) -> int:
+    """
+    Encuentra el índice del primer punto que termina la numeración BOE.
+
+    Busca patrones como "Uno.", "Veintitres.", "Ciento cinco.", etc.
+    El punto debe estar precedido por al menos una letra mayúscula
+    (inicio de la numeración textual).
+    """
+    # Patrón: palabra(s) con mayúscula inicial seguida(s) de punto
+    match = re.match(r'[A-ZÁÉÍÓÚÜÑ][a-záéíóúüñ\s]*?\.', text)
+    if match:
+        return match.end() - 1  # índice del punto
+
+    return -1
+
+
+def _strip_treatment(text: str) -> str:
+    """Elimina prefijos de tratamiento: Don, Doña, D., Dña."""
+    result = TREATMENT_PREFIXES.sub('', text)
+    return result.strip()
+
+
+def _take_until_comma(text: str) -> str:
+    """
+    Toma el contenido hasta la primera coma que cierra el nombre.
+
+    Maneja casos como "María del Carmen Pérez," donde "del" es parte
+    del nombre, no un separador de cargo.
+    """
+    # La coma que cierra el nombre suele ir tras el apellido completo
+    idx = text.find(',')
+    if idx > 0:
+        return text[:idx].strip()
+
+    # Si no hay coma, intentar hasta " del " o " de " (podría ser nombre compuesto)
+    # pero solo si parece un nombre corto
+    for sep in [' del ', ' de la ', ' de ']:
+        idx = text.find(sep)
+        if idx > 0:
+            # Verificar si hay una coma después del "del/de" (que sí cierra el nombre)
+            comma_after_sep = text.find(',', idx + len(sep))
+            if comma_after_sep > 0:
+                # Hay una coma después, usar esa
+                return text[:comma_after_sep].strip()
+
+            # Tomar hasta el separador, pero verificar que el resultado
+            # tiene al menos 2 palabras (nombre + apellido)
+            candidate = text[:idx].strip()
+            if len(candidate.split()) >= 2:
+                return candidate
+
+    # Fallback: tomar todo hasta encontrar un verbo o término de órgano
+    # Cortar en el primer "pasará", "que sirve", "plaza"
+    for term in [' pasará', ' que sirve', ' plaza', ' especialista']:
+        idx = text.lower().find(term)
+        if idx > 0:
+            candidate = text[:idx].strip()
+            if len(candidate.split()) >= 2:
+                return candidate
+
+    return text.strip()
 
 
 def _looks_like_name(text: str) -> bool:
-    """Verifica que el texto parece un nombre de persona."""
+    """
+    Valida que el texto parece un nombre real de persona.
+
+    Reglas:
+    - Mínimo 2 palabras
+    - La primera palabra empieza con mayúscula
+    - No contiene términos típicos de cargo u órgano
+    - No es demasiado largo (máx ~8 palabras)
+    - No contiene puntos internos (los nombres no tienen ".")
+    """
     if not text:
         return False
+
     palabras = text.split()
+
     if len(palabras) < 2:
         return False
-    # Al menos la primera palabra debe empezar con mayúscula
+
+    if len(palabras) > 8:
+        return False
+
+    # Primera palabra debe empezar con mayúscula
     if not palabras[0][0].isupper():
         return False
+
+    # Un nombre real no contiene puntos internos
+    if '.' in text:
+        return False
+
+    # No debe contener términos prohibidos
+    if FORBIDDEN_IN_NAME.search(text):
+        return False
+
     return True
-
-
-def _extract_fallback(parrafo: str) -> str:
-    """
-    Fallback con split('.') para párrafos que no matchean la regex principal.
-    """
-    partes = parrafo.split('.')
-    if len(partes) < 2:
-        return ""
-
-    parte_despues_punto = partes[1]
-    # Quitar tratamiento si existe
-    parte_despues_punto = re.sub(r'^(?:Don|Doña)\s+', '', parte_despues_punto)
-    nombre = parte_despues_punto.split(',')[0].strip()
-
-    if _looks_like_name(nombre):
-        return nombre
-
-    return ""

@@ -1,14 +1,14 @@
 """
 Selector de órganos por scoring dentro de un bloque de texto.
 
-Reemplaza "primer órgano encontrado" por un sistema de puntuación
-que elige el órgano más representativo para origen o destino.
+Usa posiciones absolutas (TextBlock) para filtrar órganos
+y scoring para elegir el más representativo de origen/destino.
 """
 
 import re
 from typing import Optional
 
-from src.infrastructure.pdf.parse_models import OrganMatch
+from src.infrastructure.pdf.parse_models import OrganMatch, TextBlock
 
 # Puntuaciones por tipo de órgano
 TYPE_SCORES = {
@@ -23,33 +23,38 @@ TYPE_SCORES = {
     "Tribunal Constitucional": 3,
 }
 
+# Cláusulas accesorias que penalizan la relevancia del órgano
+ACCESSORY_CLAUSES = [
+    r'mientras\s+su\s+titular',
+    r'se\s+encuentre\s+en\s+situaci[oó]n',
+    r'servicios\s+especiales',
+    r'continuando\s+en\s+la\s+misma',
+    r'con\s+sede\s+en',
+]
+
 
 def select_organs_by_block(
     organ_matches: list[OrganMatch],
-    block_text: str,
+    block: TextBlock,
 ) -> list[OrganMatch]:
     """
-    Filtra órganos que aparecen dentro de un bloque de texto dado.
+    Filtra órganos por posición absoluta dentro del bloque.
 
-    Usa las posiciones (start/end) de cada órgano para verificar
-    si está contenido en el bloque.
+    Un órgano pertenece al bloque si su posición (start, end)
+    cae dentro del rango [block.start, block.end).
     """
-    if not block_text or not organ_matches:
+    if not organ_matches or not block:
         return []
 
-    # Encontrar la posición del bloque dentro del párrafo original
-    # Como block_text es un substring del párrafo, buscamos cada órgano
-    # por su raw text en el bloque
-    result: list[OrganMatch] = []
-    for organ in organ_matches:
-        if organ.raw in block_text:
-            result.append(organ)
-    return result
+    return [
+        m for m in organ_matches
+        if block.start <= m.start < block.end
+    ]
 
 
 def pick_best_organo(
     organ_matches: list[OrganMatch],
-    block_text: str,
+    block: TextBlock,
 ) -> Optional[OrganMatch]:
     """
     Selecciona el mejor órgano de un bloque usando scoring.
@@ -58,34 +63,26 @@ def pick_best_organo(
     +10: Audiencia Provincial o TSJ
     +9: Tribunal de Instancia
     +8: Tribunal Supremo o Audiencia Nacional
-    +5: Tiene sección
-    +3: Tiene localidad
-    +2: Está cerca del inicio del bloque (primer órgano suele ser el relevante)
-    -5: Parece alias corto
-    -3: Está dentro de cláusula "mientras su titular"
-    -2: Está dentro de "(antes ...)"
+    +5: Tiene sección definida
+    +3: Tiene localidad definida
+    +2: Tiene número de plaza
+    +2: Está cerca del inicio útil del bloque
+    -5: Tiene alias histórico "(antes ...)"
+    -3: Está dentro de cláusula accesoria
+    -8: Parece alias corto (JPI 14)
     """
-    if not organ_matches:
-        return None
-
-    # Filtrar por bloque primero
-    candidates = select_organs_by_block(organ_matches, block_text)
-    if not candidates:
-        # Si no encontró por posición, buscar por contenido
-        for organ in organ_matches:
-            if organ.raw in block_text:
-                candidates.append(organ)
+    candidates = select_organs_by_block(organ_matches, block)
 
     if not candidates:
         return None
 
-    scored = [(score_organo(m, block_text), m) for m in candidates]
+    scored = [(score_organo(m, block), m) for m in candidates]
     scored.sort(key=lambda x: x[0], reverse=True)
 
     return scored[0][1]
 
 
-def score_organo(match: OrganMatch, block_text: str) -> int:
+def score_organo(match: OrganMatch, block: TextBlock) -> int:
     """
     Calcula la puntuación de un órgano para un bloque dado.
     """
@@ -107,16 +104,18 @@ def score_organo(match: OrganMatch, block_text: str) -> int:
         score += 2
 
     # Bonificación por cercanía al inicio del bloque
-    pos_in_block = _position_in_block(match, block_text)
-    if pos_in_block is not None and pos_in_block < 200:
+    pos_in_block = match.start - block.start
+    if pos_in_block < 150:
         score += 2
+    elif pos_in_block < 300:
+        score += 1
 
     # Penalización por alias histórico
     if match.alias_historico:
         score -= 5
 
-    # Penalización si está dentro de cláusula "mientras su titular"
-    if _is_in_while_clause(match, block_text):
+    # Penalización si está dentro de cláusula accesoria
+    if _is_in_accessory_clause(match, block):
         score -= 3
 
     # Penalización si parece alias corto
@@ -126,24 +125,26 @@ def score_organo(match: OrganMatch, block_text: str) -> int:
     return score
 
 
-def _position_in_block(match: OrganMatch, block_text: str) -> Optional[int]:
-    """Devuelve la posición del órgano dentro del bloque."""
-    idx = block_text.find(match.raw)
-    if idx >= 0:
-        return idx
-    return None
+def _is_in_accessory_clause(match: OrganMatch, block: TextBlock) -> bool:
+    """
+    Verifica si el órgano está dentro de una cláusula accesoria.
 
+    Busca patrones como "mientras su titular", "servicios especiales",
+    etc. en el contexto inmediato del órgano dentro del bloque.
+    """
+    # Posición relativa del órgano dentro del bloque
+    rel_start = match.start - block.start
+    rel_end = match.end - block.start
 
-def _is_in_while_clause(match: OrganMatch, block_text: str) -> bool:
-    """Verifica si el órgano está dentro de una cláusula 'mientras su titular'."""
-    idx = block_text.find(match.raw)
-    if idx < 0:
-        return False
+    # Ventana de contexto: 300 chars antes del órgano
+    window_start = max(0, rel_start - 300)
+    context = block.text[window_start:rel_end]
 
-    # Buscar "mientras" en los 300 chars anteriores al órgano
-    window_start = max(0, idx - 300)
-    context = block_text[window_start:idx]
-    return bool(re.search(r'mientras\s+(su\s+titular|se\s+encuentre)', context, re.IGNORECASE))
+    for pattern in ACCESSORY_CLAUSES:
+        if re.search(pattern, context, re.IGNORECASE):
+            return True
+
+    return False
 
 
 def _looks_like_alias(raw: str) -> bool:

@@ -115,15 +115,18 @@ class TestOriginDestinationSplit:
             "su puesto en la Audiencia Provincial de Cádiz."
         )
         origen, destino = split_origin_destination(text)
-        assert "Audiencia Provincial de Sevilla" in origen
-        assert "Audiencia Provincial de Cádiz" in destino
-        assert "pasará a desempeñar" in destino
+        assert "Audiencia Provincial de Sevilla" in origen.text
+        assert "Audiencia Provincial de Cádiz" in destino.text
+        assert "pasará a desempeñar" in destino.text
+        # Verify ranges
+        assert origen.start == 0
+        assert destino.end == len(text)
 
     def test_no_split_when_no_separator(self):
         text = "Dos. Don Carlos, juez del Tribunal Supremo."
         origen, destino = split_origin_destination(text)
-        assert origen == text
-        assert destino == ""
+        assert origen.text == text
+        assert destino is None
 
     def test_best_organo_from_origin(self):
         text = (
@@ -131,7 +134,9 @@ class TestOriginDestinationSplit:
             "especialista en menores"
         )
         organs = extract_organs(text)
-        match = pick_best_organo(organs, text)
+        from src.infrastructure.pdf.parse_models import TextBlock
+        block = TextBlock(text=text, start=0, end=len(text))
+        match = pick_best_organo(organs, block)
         assert match is not None
         assert "Audiencia Provincial" in match.organ_type
 
