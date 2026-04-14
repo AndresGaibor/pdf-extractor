@@ -15,6 +15,10 @@ from src.infrastructure.pdf.parse_models import TextBlock
 
 
 def test_pick_best_organo_andrea_dominguez():
+    """
+    Andrea Domínguez: origen sección civil e instrucción, destino sección instrucción.
+    La cláusula 'mientras su titular...' no debe afectar la selección de destino.
+    """
     paragraph = (
         "Tres. Doña Andrea Domínguez González, jueza, que sirve la plaza número 3 de la "
         "Sección Civil y de Instrucción del Tribunal de Instancia de Chiclana de la Frontera, "
@@ -40,6 +44,10 @@ def test_pick_best_organo_andrea_dominguez():
 
 
 def test_pick_best_organo_maria_carmen_cimas():
+    """
+    María Carmen Cimas: origen con alias (antes JP 13), destino Audiencia Nacional.
+    El alias no debe ser tomado como órgano.
+    """
     paragraph = (
         "Siete. Doña María Carmen Cimas Giménez, magistrada, que sirve la plaza número 13 "
         "de la Sección de lo Penal del Tribunal de Instancia de Madrid (antes JP 13), pasará "
@@ -61,6 +69,10 @@ def test_pick_best_organo_maria_carmen_cimas():
 
 
 def test_select_organs_by_block_filters_by_range():
+    """
+    Verifica que select_organs_by_block filtra órganos por posición absoluta,
+    no por substring matching.
+    """
     paragraph = (
         "Uno. Doña María García, jueza de la Audiencia Provincial de Sevilla, "
         "pasará a desempeñar su puesto en la Audiencia Provincial de Cádiz."
@@ -76,16 +88,17 @@ def test_select_organs_by_block_filters_by_range():
     assert len(organos_origen) >= 1
     assert len(organos_destino) >= 1
 
-    # Origin organs should be in origin block text
+    # Origin organs should be in origin block range
     for organ in organos_origen:
         assert bloque_origen.start <= organ.start < bloque_origen.end
 
-    # Destination organs should be in destination block text
+    # Destination organs should be in destination block range
     for organ in organos_destino:
         assert bloque_destino.start <= organ.start < bloque_destino.end
 
 
 def test_select_organs_by_block_empty_when_no_match():
+    """Bloque vacío no debe devolver órganos."""
     organ_matches = extract_organs("Audiencia Provincial de Sevilla")
     empty_block = TextBlock(text="", start=1000, end=2000)
 
