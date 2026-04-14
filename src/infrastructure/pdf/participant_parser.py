@@ -21,7 +21,9 @@ TREATMENT_PREFIXES = re.compile(
 FORBIDDEN_IN_NAME = re.compile(
     r'\b(?:juez|jueza|magistrad|tribunal|audiencia|sección|sala|'
     r'juzgado|oficina\s+de\s+justicia|pasará|plaza|provincia|'
-    r'servicios\s+especiales|situaci[oó]n\s+administrativa)\b',
+    r'servicios\s+especiales|situaci[oó]n\s+administrativa|'
+    r'excluir|solicitudes|incidencias|resoluci[oó]n|'
+    r'recurso|preferencias|art[ií]culos|Ley Org[aá]nica)\b',
     re.IGNORECASE
 )
 
