@@ -1,6 +1,6 @@
 [project]
 name = "extractor-pdf"
-version = "0.1.3"
+version = "0.3.0"
 description = "Desktop application for extracting structured judicial data from BOE PDF files and exporting it to Excel."
 readme = "README.md"
 requires-python = ">=3.13"
