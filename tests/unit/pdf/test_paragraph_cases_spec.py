@@ -20,6 +20,7 @@ from src.infrastructure.pdf.row_parser import parse_paragraph
 
 from tests.unit.pdf.fixtures.spec_cases_jueces import SPEC_CASES_JUECES
 from tests.unit.pdf.fixtures.spec_cases_magistrados import SPEC_CASES_MAGISTRADOS
+from tests.unit.pdf.helpers import norm
 
 
 ALL_SPEC_CASES = SPEC_CASES_JUECES + SPEC_CASES_MAGISTRADOS
@@ -35,13 +36,6 @@ for _c in ALL_SPEC_CASES:
     else:
         mark = ()
     SPEC_PARAMS.append(pytest.param(_c, marks=mark, id=cid))
-
-
-def norm(value: str) -> str:
-    """Normalización simple: colapsar espacios, no quitar tildes."""
-    if value is None:
-        return ""
-    return " ".join(str(value).split()).strip()
 
 
 @pytest.fixture
