@@ -9,6 +9,7 @@ dependencies = [
     "openpyxl==3.1.5",
     "pandas==2.3.3",
     "pymupdf4llm==0.3.4",
+    "PyMuPDF>=1.24.0",
 ]
 
 [dependency-groups]
@@ -19,6 +20,9 @@ dev = [
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+markers = [
+    "regression: regression tests with real PDFs",
+]
 
 [tool.ruff]
 target-version = "py313"

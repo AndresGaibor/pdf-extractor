@@ -8,6 +8,8 @@ con el párrafo anterior.
 También detecta bloques de corte que indican fin de resoluciones útiles.
 """
 
+import re
+
 from src.domain.constants import NUMERACION
 from src.infrastructure.pdf.organ_patterns import CUTOFF_MARKERS
 
@@ -43,11 +45,37 @@ def build_candidate_paragraphs(clean_text: str) -> list[str]:
 
 
 def _is_cutoff_block(text: str) -> bool:
-    """Verifica si un texto contiene un marcador de fin de resoluciones."""
+    """Verifica si un texto es un bloque de fin de resoluciones.
+
+    Detecta:
+    1. Marcadores al inicio del párrafo
+    2. Bloques de "Incidencias" que no están en encabezados
+    """
     texto_normalizado = text.strip()
+
     for marker in CUTOFF_MARKERS:
-        if marker.lower() in texto_normalizado.lower():
+        if texto_normalizado.lower().startswith(marker.lower()):
             return True
+
+    # Detectar "X. Incidencias." donde X es numeración
+    # Esto evita "situaciones e incidencias" en encabezados
+    # Usamos \w* después de prefijos como Dieci/Veinti para capturar
+    # Dieciséis, Veintiuno, etc.
+    if re.search(
+        r'^(?:Uno|Dos|Tres|Cuatro|Cinco|Seis|Siete|Ocho|Nueve|Diez|'
+        r'Once|Doce|Trece|Catorce|Quince|Dieci\w*|Veinte|Veinti\w*|'
+        r'Treinta|Cuarenta|Cincuenta|Sesenta|Setenta|Ochenta|'
+        r'Noventa|Ciento|Doscientos|Trescientos|Cuatrocientos|'
+        r'Quinientos|Seiscientos|Setecientos|Ochocientos|'
+        r'Novecientos|Mil)\.?\s+Incidencias',
+        texto_normalizado, re.IGNORECASE
+    ):
+        return True
+
+    # También detectar "Incidencias:" al inicio (sin numeración)
+    if texto_normalizado.lower().startswith("incidencias:"):
+        return True
+
     return False
 
 

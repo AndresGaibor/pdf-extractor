@@ -191,13 +191,13 @@ ORGAN_STOP_WORDS = [
 ]
 
 # Bloques de texto que indican fin de resoluciones útiles
+# Deben ser suficientemente específicos para no coincidir con encabezados
 CUTOFF_MARKERS = [
     "Excluir las siguientes solicitudes",
     "La incidencia que en la resolución",
     "Contra la presente disposición",
     "Los Magistrados/as nombrados/as",
     "Los/as jueces/zas nombrados/as",
-    "Incidencias",
     "Excluir las siguientes",
 ]
 

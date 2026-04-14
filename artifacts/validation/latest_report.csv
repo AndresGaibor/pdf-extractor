@@ -1,0 +1,3 @@
+pdf,expected_rows,actual_rows,matched,total_expected,match_rate,missing_participants,extra_participants,field_mismatches,is_passing
+PDF.pdf,13,13,0,13,0.0,,,0,True
+PDF2.pdf,20,20,0,20,0.0,,,0,True
